@@ -57,21 +57,24 @@ def replace_line_in_file(filepath, line_number, corrected_code):
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.writelines(lines)
             print(f"\n✅ Successfully updated line {line_number} in {filepath}!")
-            #loop through main flow again until build is successful
         else:
             print(f"❌ Line number {line_number} out of range for file {filepath}")
     except Exception as e:
         print(f"❌ Error replacing line in {filepath}: {e}")
 
 # --- MAIN FLOW ---
+# --- MAIN FLOW ---
+while True:
+    stdout, stderr = run_npm_build()
+    print("STDOUT:\n", stdout)
+    print("STDERR:\n", stderr)
 
-stdout, stderr = run_npm_build()
-print("STDOUT:\n", stdout)
-print("STDERR:\n", stderr)
+    error_message = stderr.strip()
 
-error_message = stderr.strip()
+    if not error_message:
+        print("✅ Build succeeded! No errors to fix.")
+        break  # Exit the loop when build is successful
 
-if error_message:
     filepath, line_number = extract_file_and_line(error_message)
     if filepath and line_number:
         # Ensure filepath is absolute and doesn't get duplicated
@@ -101,5 +104,5 @@ Please provide the corrected code for the broken line wrapped inside triple back
 
     # Replace the line in the file with the corrected code
     replace_line_in_file(filepath, line_number, corrected_code)
-else:
-    print("✅ Build succeeded! No errors to fix.")
+
+    print("\n🔁 Retrying build after applying fix...\n")
