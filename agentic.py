@@ -1,20 +1,20 @@
-from openai import OpenAI
-import subprocess
 import os
+import subprocess
 import re
+from openai import OpenAI
 
-# --- LLM CLIENT ---
+# Initialize LLM Client
 client = OpenAI(
     base_url="http://localhost:1234/v1",
-    api_key="lm-studio",  # Dummy key
+    api_key="lm-studio",  # Dummy API key, replace with real one
 )
 
 # --- HELPER FUNCTIONS ---
 
-def run_npm_build():
+def run_build_command(build_command):
     try:
         result = subprocess.run(
-            ["npm", "run", "build"],
+            build_command,
             cwd=os.getcwd(),
             check=False,
             capture_output=True,
@@ -26,8 +26,7 @@ def run_npm_build():
         return "", str(e)
 
 def extract_file_and_line(error_message):
-    # Updated regex to handle errors like: C:\path\to\file.js:1
-    match = re.search(r'([a-zA-Z0-9_\-\\/.]+(?:\.js|\.jsx|\.ts|\.tsx)):(\d+)', error_message)
+    match = re.search(r'([a-zA-Z0-9_\-\\/.]+(?:\.js|\.jsx|\.ts|\.tsx|\.py|\.cs|\.java)):(\d+)', error_message)
     if match:
         filepath = match.group(1)
         line_number = int(match.group(2))
@@ -58,10 +57,57 @@ def replace_lines_in_file(filepath, corrected_code):
     except Exception as e:
         print(f"❌ Error replacing lines in {filepath}: {e}")
 
+def identify_project_type():
+    script_directory = os.path.dirname(os.path.abspath(__file__))
+    top_level_files = os.listdir(script_directory)
+    important_files = ['package.json', 'requirements.txt', 'setup.py', 'pyproject.toml', 'pom.xml', '.csproj', '.sln']
+    existing_configs = []
+
+    # Check for important config files
+    for file in important_files:
+        file_path = os.path.join(script_directory, file)
+        if os.path.isfile(file_path):
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    existing_configs.append((file, content))
+            except Exception as e:
+                print(f"Error reading {file_path}: {e}")
+
+    # Look for .NET or JavaScript-related files
+    dotnet_files = [f for f in top_level_files if f.endswith('.csproj') or f.endswith('.sln')]
+    nodejs_files = [f for f in top_level_files if f == 'package.json']
+    python_files = [f for f in top_level_files if f == 'requirements.txt' or f == 'setup.py']
+
+    if dotnet_files:
+        return "dotnet", dotnet_files
+    elif nodejs_files:
+        return "nodejs", nodejs_files
+    elif python_files:
+        return "python", python_files
+    else:
+        return "unknown", []
+
 # --- MAIN FLOW ---
 
+project_type, project_files = identify_project_type()
+
+# Build commands for different project types
+if project_type == "nodejs":
+    build_command = ["npm", "run", "build"]
+elif project_type == "python":
+    build_command = ["python", "setup.py", "install"]
+elif project_type == "dotnet":
+    build_command = ["dotnet", "build"]
+else:
+    print("❌ Unknown project type or no recognizable build configuration.")
+    exit(1)
+
+# Print the build command to the console
+print(f"🔧 Executing build command: {' '.join(build_command)}")
+# Run the build command
 while True:
-    stdout, stderr = run_npm_build()
+    stdout, stderr = run_build_command(build_command)
     print("STDOUT:\n", stdout)
     print("STDERR:\n", stderr)
 
@@ -92,7 +138,7 @@ while True:
 
     # --- SINGLE PROMPT: Ask for corrected code based on entire file context ---
     prompt = f"""
-I tried running `npm run build` but it failed with this error:
+I tried running `{build_command[0]} {build_command[1]}` but it failed with this error:
 
 {error_message}
 
@@ -117,7 +163,7 @@ Please provide the corrected code wrapped inside triple backticks like this:
     print("\n🔁 Retrying build after applying fix...\n")
 
     # Re-run the build after applying the fix
-    stdout, stderr = run_npm_build()
+    stdout, stderr = run_build_command(build_command)
     error_message = stderr.strip()
 
     if not error_message:
