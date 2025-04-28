@@ -41,7 +41,7 @@ def extract_code_from_response(response_text):
     else:
         return response_text.strip()
 
-def replace_line_in_file(filepath, line_number, corrected_code):
+def replace_lines_in_file(filepath, corrected_code):
     try:
         # Ensure the file path is absolute and properly formatted
         filepath = os.path.abspath(filepath)
@@ -50,20 +50,16 @@ def replace_line_in_file(filepath, line_number, corrected_code):
         with open(filepath, 'r', encoding='utf-8') as f:
             lines = f.readlines()
 
-        if 1 <= line_number <= len(lines):
-            print(f"🔵 Original Line {line_number}: {lines[line_number - 1].strip()}")
-            lines[line_number - 1] = corrected_code + '\n'
+        # Replace the entire file content with the corrected code
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.writelines(corrected_code)
 
-            with open(filepath, 'w', encoding='utf-8') as f:
-                f.writelines(lines)
-            print(f"\n✅ Successfully updated line {line_number} in {filepath}!")
-        else:
-            print(f"❌ Line number {line_number} out of range for file {filepath}")
+        print(f"\n✅ Successfully updated the file {filepath}!")
     except Exception as e:
-        print(f"❌ Error replacing line in {filepath}: {e}")
+        print(f"❌ Error replacing lines in {filepath}: {e}")
 
 # --- MAIN FLOW ---
-# --- MAIN FLOW ---
+
 while True:
     stdout, stderr = run_npm_build()
     print("STDOUT:\n", stdout)
@@ -84,25 +80,49 @@ while True:
         print("\n⚠️ Could not detect file path and line number. Exiting.")
         exit(1)
 
-    # --- SINGLE PROMPT: Ask for corrected code ONLY ---
+    # Read the entire file to provide context to the AI model
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+    except Exception as e:
+        print(f"Failed to read file {filepath}: {e}")
+        break
+
+    context_snippet = "".join(lines)  # Entire file as context
+
+    # --- SINGLE PROMPT: Ask for corrected code based on entire file context ---
     prompt = f"""
 I tried running `npm run build` but it failed with this error:
 
 {error_message}
 
-Please provide the corrected code for the broken line wrapped inside triple backticks like this
+Here is the entire code in the file:
+{context_snippet}
+
+Please provide the corrected code wrapped inside triple backticks like this:
 """
 
     response = client.completions.create(
         model="mistral-7b-instruct-v0.1",
         prompt=prompt,
-        max_tokens=500
+        max_tokens=1000
     )
 
     corrected_code = extract_code_from_response(response.choices[0].text.strip())
     print("\n--- Extracted Corrected Code ---\n", corrected_code)
 
-    # Replace the line in the file with the corrected code
-    replace_line_in_file(filepath, line_number, corrected_code)
+    # Replace the entire file content with the corrected code
+    replace_lines_in_file(filepath, corrected_code)
 
     print("\n🔁 Retrying build after applying fix...\n")
+
+    # Re-run the build after applying the fix
+    stdout, stderr = run_npm_build()
+    error_message = stderr.strip()
+
+    if not error_message:
+        print("✅ Build succeeded after fix!")
+        break  # Exit the loop when build is successful
+    else:
+        print("❌ Build still failed after fix.")
+        break  # Exit the loop after one retry
