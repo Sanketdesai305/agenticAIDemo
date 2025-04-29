@@ -1,0 +1,68 @@
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          submodules: 'true'
+          
+      - name: Set up Python
+        if: runner.os == 'Linux'
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+
+      - name: Set up Node.js
+        if: runner.os == 'Linux'
+        uses: actions/setup-node@v2
+        with:
+          node-version: '14'
+
+      - name: Set up Java
+        if: runner.os == 'Linux'
+        uses: actions/setup-java@v2
+        with:
+          java-version: '11'
+          distribution: 'adoptopenjdk'  # Dynamic Java distribution
+
+      - name: Set up Go
+        if: runner.os == 'Linux'
+        uses: actions/setup-go@v2
+        with:
+          go-version: '1.16'
+          
+      - name: Set up .NET
+        if: runner.os == 'Linux'
+        uses: actions/setup-dotnet@v2
+        with:
+          dotnet-version: '6.0'
+
+      # Install dependencies and run tests based on the project type
+      - name: Install dependencies and run tests
+        run: |
+          if [ "nodejs" == "nodejs" ]; then
+            npm install && npm run test;
+          elif [ "nodejs" == "python" ]; then
+            pip install -r requirements.txt && pytest;
+          elif [ "nodejs" == "java" ]; then
+            mvn clean install;
+          elif [ "nodejs" == "go" ]; then
+            go mod tidy && go test ./...;
+          elif [ "nodejs" == "dotnet" ]; then
+            dotnet restore && dotnet build && dotnet test;
+          fi
+        env:
+          GITHUB_TOKEN: ${ secrets.GITHUB_TOKEN }
+    
