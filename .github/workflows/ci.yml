@@ -1,0 +1,45 @@
+name: JavaScript Bundle and Minifier CI/CD Workflow
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Install dependencies for Node.js
+        run: npm ci
+      - name: Build Node.js project
+        run: npm run build
+      - name: Install dependencies for Go
+        run: go get -u github.com/gorilla/mux
+      - name: Build Go project
+        run: go build -o main
+      - name: Minify JavaScript files
+        uses: babel/core@latest
+        with:
+          preset: 'env'
+          input: ./node_modules/.babelrc/preset-env.js
+          output: dist/js/main.min.js
+      - name: Upload artifact to S3 bucket
+        uses: actions/upload-artifact@v2
+        with:
+          name: main
+          path: dist/js/main.min.js
+      - name: Install dependencies for Python
+        run: pip install --no-cache-dir .
+      - name: Build Python project
+        run: python setup.py build
+      - name: Install dependencies for Java
+        uses: actions/setup-java@v2
+        with:
+          distribution: adoptopenjdk
+          version: 17
+      - name: Test Java project
+        run: mvn test
+artifacts:
+  paths:
+    - ./node_modules/**/*
